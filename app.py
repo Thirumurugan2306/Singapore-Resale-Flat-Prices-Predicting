@@ -1,74 +1,83 @@
-# Import necessary libraries
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from joblib import dump, load  # Used for saving and loading models
 import streamlit as st
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from joblib import load
 
-# Data Collection and Preprocessing
-url = "https://beta.data.gov.sg/collections/189/download"
-data = pd.read_csv(url)
-# Preprocess the data as needed (cleaning, structuring)
+# Load the best model
+best_model = load('random_forest_model_reduced.joblib')
+# Load your original DataFrame (replace this with your actual data loading code)
+df = pd.read_csv('combined.csv')
 
-# Feature Engineering
-# Extract relevant features and create additional features
-features = ['town', 'flat_type', 'storey_range', 'floor_area_sqm', 'flat_model', 'lease_commence_date']
-target = 'resale_price'
-X = data[features]
-y = data[target]
+# Function to preprocess user input
+def preprocess_input(user_input):
+    # Your preprocessing logic here
+    return user_input
 
-# Model Selection and Training
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-model = RandomForestRegressor()  # You can choose a different model based on your analysis
-model.fit(X_train, y_train)
-
-# Save the trained model
-dump(model, 'resale_price_model.joblib')
-
-# Model Evaluation
-y_pred = model.predict(X_test)
-mae = mean_absolute_error(y_test, y_pred)
-mse = mean_squared_error(y_test, y_pred)
-rmse = mean_squared_error(y_test, y_pred, squared=False)
-r2 = r2_score(y_test, y_pred)
-
-# Streamlit Web Application
-def predict_price(town, flat_type, storey_range, floor_area, flat_model, lease_commence_date):
-    input_data = pd.DataFrame([[town, flat_type, storey_range, floor_area, flat_model, lease_commence_date]], columns=features)
+# Function to predict using the best model
+def predict_price(model, input_data):
+    # Your prediction logic here
     prediction = model.predict(input_data)
-    return prediction[0]
+    return prediction
 
-st.title("Singapore HDB Resale Price Prediction")
-# Create input elements for user input
-town = st.selectbox("Town", data['town'].unique())
-flat_type = st.selectbox("Flat Type", data['flat_type'].unique())
-storey_range = st.selectbox("Storey Range", data['storey_range'].unique())
-floor_area = st.number_input("Floor Area (sqm)", min_value=1)
-flat_model = st.selectbox("Flat Model", data['flat_model'].unique())
-lease_commence_date = st.number_input("Lease Commence Date", min_value=1960, max_value=2023)
-
-# Get prediction
-if st.button("Predict Resale Price"):
-    prediction = predict_price(town, flat_type, storey_range, floor_area, flat_model, lease_commence_date)
-    st.success(f"Predicted Resale Price: ${prediction:,.2f}")
-
-# Streamlit API for Model
-@st.cache(allow_output_mutation=True)
-def load_model():
-    return load('resale_price_model.joblib')
-
-# Load the model
-loaded_model = load_model()
-
-# Streamlit API endpoint for prediction
-@st.experimental_singleton
-def predict_api(input_data):
-    return loaded_model.predict(input_data)
-
-# Streamlit API endpoint for user input
-@st.experimental_singleton
-def input_api(town, flat_type, storey_range, floor_area, flat_model, lease_commence_date):
-    return pd.DataFrame([[town, flat_type, storey_range, floor_area, flat_model, lease_commence_date]], columns=features)
+# Streamlit App
+def main():
+    st.set_page_config(
+            page_title="Housing Price Prediction App",
+            layout="wide",
+        )
+    
+    
+    # Define CSS styles for the title
+    title_style = """
+        color: white;
+        text-align: center;
+        padding: 10px;
+        background-color: Grey;
+        border-radius: 15px; /* Adjust the value to control the curvature */
+    """
+    
+    st.markdown(f'<h1 style="{title_style}">Housing Price Prediction App</h1>', unsafe_allow_html=True)
+    # User input form
+    st.header("User Input")
+    town = st.selectbox("Town", df['town'].unique())
+    month = st.selectbox("Month", df['month'].unique())
+    flat_type = st.selectbox("Flat Type", df['flat_type'].unique())
 
 
+    cbd_dist = st.slider("CBD Distance", min_value=0, max_value=15000, value=5000)
+    min_dist_mrt = st.slider("Min Distance to MRT", min_value=0, max_value=2000, value=500)
+    floor_area_sqm = st.slider("Floor Area (sqm)", min_value=40, max_value=200, value=80)
+    lease_remain_years = st.slider("Lease Remaining (years)", min_value=30, max_value=99, value=60)
+    storey_median = st.slider("Storey Range Median", min_value=0, max_value=50, value=25)
+
+    
+# Dropdowns for categorical features
+   
+
+    user_input = {
+        'cbd_dist': cbd_dist,
+        'min_dist_mrt': min_dist_mrt,
+        'floor_area_sqm': floor_area_sqm,
+        'lease_remain_years': lease_remain_years,
+        'storey_median': storey_median
+    }
+
+    # Preprocess user input
+    input_data = preprocess_input(pd.DataFrame(user_input, index=[0]))
+
+    # Standardize input data
+    scaler = StandardScaler()
+    input_data = scaler.fit_transform(input_data)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    if col2.button("Predict"):
+        # Get prediction
+        prediction = predict_price(best_model, input_data)
+
+        # Display prediction
+        st.success(f"The predicted housing price is: {prediction[0]:,.2f} SGD")
+
+if __name__ == "__main__":
+    main()
